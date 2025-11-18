@@ -1,0 +1,203 @@
+-- Run the dataset scripts from psql using below command:
+\i /Users/thoufiq/THOUFIQ/Lighthall/2023/SQL_Bootcamp_2023_Cohort2_Weekends/Case_Study/Formula1/Dataset/INSERT_Scripts/run.sql;
+
+
+select count(1) from seasons; -- 74
+select count(1) from status; -- 139	
+select count(1) from circuits; -- 77
+select count(1) from races; -- 1102
+select count(1) from drivers; -- 857
+select count(1) from constructors; -- 211
+select count(1) from constructor_results; -- 12170
+select count(1) from constructor_standings; -- 12941
+select count(1) from driver_standings; -- 33902
+select count(1) from lap_times; -- 538121
+select count(1) from pit_stops; -- 9634
+select count(1) from qualifying; -- 9575
+select count(1) from results; -- 25840
+select count(1) from sprint_results; -- 120
+
+
+select * from seasons; -- 74
+select * from status; -- 139	
+select * from circuits; -- 77
+select * from races; -- 1102
+select * from drivers; -- 857
+select * from constructors; -- 211
+select * from constructor_results; -- 12170
+select * from constructor_standings; -- 12941
+select * from driver_standings; -- 33902
+select * from lap_times; -- 538121
+select * from pit_stops; -- 9634
+select * from qualifying; -- 9575
+select * from results; -- 25840
+select * from sprint_results; -- 120
+
+
+
+Find the following:
+
+
+Common:
+List down the names of all F1 champions and the no of times they have won it.
+Who has won the most constructor championships
+Which circuit has hosted the most no of races. Display the circuit name, no of races, city and country.
+How many races has India hosted?
+Display the winner and runners up for each season. Both the driver and constructors.
+Display the top 10 drivers with most wins.
+Display the top 3 constructors of all time.
+Identify the drivers who have won races with multiple teams.
+How many drivers have never won any race.
+Are there any constructors who never scored a point? if so mention their name and how many races they participated in?
+Mention the drivers who have won more than 50 races.
+Identify the podium finishers of each race in 2022 season
+For 2022 season, mention the points structure for each position. i.e. how many points are awarded to each race finished position. 
+How many drivers participated in 2022 season?
+How many races has the top 5 constructors won in the last 10 years.
+Display the winners of every sprint so far in F1
+Find the driver who has the most no of Did Not Qualify during the race.
+During the last race of 2022 season, identify the drivers who did not finish the race and the reason for it.
+What is the average lap time for each F1 circuit. Sort based on least lap time.
+
+
+
+
+
+
+
+
+
+Easy:
+1) Identify the country which has produced the most F1 drivers.
+2) Which country has produced the most no of F1 circuits
+3) Which countries have produced exactly 5 constructors? 
+4) List down the no of races that have taken place each year
+
+
+
+
+Intermediate:
+1) Who is the youngest and oldest F1 driver?
+2) List down the no of races that have taken place each year and mentioned which was the first and the last race of each season.
+
+
+
+
+Advanced:
+1) Build a report, which displays the driver championship table for each season. Have options such that user can choose the season and the no of results (top 10, top 5 etc.)
+2) Build a report, which displays the constructor championship table for each season. Have options such that user can choose the season and the no of results (top 10, top 5 etc.)
+3) Display the following for 2022 season:
+	year, race_no, circuit name, driver name, driver race position, driver race points, flag to indicate if winner
+	, constructor name, constructor position, constructor points, , flag to indicate if constructor is winner
+	, race status of each driver, flag to indicate fastest lap for which driver, total no of pit stops by each driver
+
+		select r.raceid, r.year as season, r.round as race_no, r.name as circuit_name
+		, concat(d.forename,' ',d.surname) as driver_name, ds.position as race_position
+		, ds.points as race_points, case when ds.wins=1 then 'WINNER' end as race_winner
+		, c.name as constructor, cs.position as constructor_position
+		, cs.points as constructor_points
+		, case when cs.wins=1 then 'WINNER' end as constructor_winner
+		, sts.status, case when lp.driverid is not null then 'Fastest Lap' end as Fastest_Lap
+		, pt.no_of_stops 
+		from races r
+		join driver_standings ds on ds.raceid=r.raceid
+		join drivers d on d.driverid=ds.driverid
+		join constructor_standings cs on cs.raceid=r.raceid
+		join constructors c on c.constructorid = cs.constructorid
+		join results res on res.raceid=r.raceid and res.constructorid=cs.constructorid and res.driverid=ds.driverid
+		join status sts on sts.statusid=res.statusid
+		left join ( select driverid
+					from lap_times lp
+					join (select raceid, min(time) as total_lap_time
+						  from lap_times where raceid=1074
+						  group by raceid) x on lp.raceid = x.raceid and total_lap_time=lp.time
+				  ) lp on lp.driverid = ds.driverid
+		left join (	select raceid, driverid, count(*) as no_of_stops
+					from pit_stops where raceid=1074
+					group by raceid, driverid
+				  ) pt on pt.raceid=r.raceid and pt.driverid=ds.driverid
+		order by r.raceid, race_no, race_position
+
+4) List down the names of all F1 champions and the no of times they have won it.
+		with cte as 
+				(select r.year, concat(d.forename,' ',d.surname) as driver_name
+				, sum(res.points) as tot_points
+				, rank() over(partition by r.year order by sum(res.points) desc) as rnk
+				from races r
+				join driver_standings ds on ds.raceid=r.raceid
+				join drivers d on d.driverid=ds.driverid
+				join results res on res.raceid=r.raceid and res.driverid=ds.driverid --and res.constructorid=cs.constructorid 
+				--where r.year>=2000
+				group by r.year,  res.driverid, concat(d.forename,' ',d.surname) ),
+			cte_rnk as
+				(select * from cte where rnk=1)
+		select driver_name, count(1) as no_of_championships
+		from cte_rnk
+		group by driver_name
+		order by 2 desc;
+
+5) Who has won the most constructor championships
+		with cte as
+				(select r.year, c.name as constructor_name
+				, sum(res.points) as tot_points
+				, rank() over(partition by r.year order by sum(res.points) desc) as rnk
+				from races r
+				join constructor_standings cs on cs.raceid=r.raceid
+				join constructors c on c.constructorid = cs.constructorid
+				join constructor_results res on res.raceid=r.raceid and res.constructorid=cs.constructorid --and res.constructorid=cs.constructorid 
+				--where r.year>=2022
+				group by r.year,  res.constructorid, c.name),
+			cte_rnk as
+				(select * from cte where rnk=1)
+		select constructor_name, count(1) as no_of_championships
+		from cte_rnk
+		group by constructor_name
+		order by 2 desc;
+
+
+
+
+
+
+-- SOLUTIONS:
+1) Identify the country which has produced the most F1 drivers.
+select nationality,count(1) from drivers group by nationality order by 2 desc limit 1
+
+
+2) Which country has produced the most no of F1 circuits
+select country,count(1) from circuits group by country order by 2 desc limit 1
+
+
+3) Which countries have produced exactly 5 constructors? 
+select nationality,count(1) from constructors group by nationality having count(1) = 5;
+
+4) List down the no of races that have taken place each year
+select year, count(1) 
+from races
+group by year
+order by year desc
+
+
+
+
+1) Who is the youngest F1 driver?
+select max(case when rn=1 then forename||' '||surname end) as oldest_driver
+, max(case when rn=cnt then forename||' '||surname end) as youngest_driver
+from (
+	select *, row_number() over (order by dob ) as rn, count(*) over() as cnt
+	from drivers) x
+where rn = 1 or rn = cnt
+
+
+
+2) List down the no of races that have taken place each year and mentioned which was the first and the last race of each season.
+select distinct year
+,first_value(name) over(partition by year order by date) as first_race
+, last_value(name) over(partition by year order by date 
+					   range between unbounded preceding and unbounded following) as last_race
+, count(*) over(partition by year) as no_of_races
+from races
+order by year desc
+
+
+
